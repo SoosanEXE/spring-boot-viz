@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "viz.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -15,5 +16,9 @@
   "bugs": {
     "url": "https://github.com/SoosanEXE/spring-boot-viz/issues"
   },
-  "homepage": "https://github.com/SoosanEXE/spring-boot-viz#readme"
+  "homepage": "https://github.com/SoosanEXE/spring-boot-viz#readme",
+  "dependencies": {
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-java": "^0.23.5"
+  }
 }
