@@ -235,19 +235,20 @@ function toDot(depsMap) {
     uniqueDeps.forEach((dep) => {
       g.setNode(dep);
       g.setEdge(cls, dep, {
-        color: "#757575",
+        color: "#0b269e",
       });
     });
   }
-  g.setGraph({ rankdir: "LR", bgcolor: "#111111", pad: 0.3 });
+  g.setGraph({ rankdir: "LR", bgcolor: "#ffffff", pad: 0.3 });
   const orderedNodes = alg.topsort(g);
   orderedNodes.forEach((node, rank) => {
     g.setNode(node, {
       shape: "box",
       style: "rounded",
-      color: "#c6c5fe",
-      fontcolor: "#c6c5fe",
+      color: "#0b269e",
+      fontcolor: "#0b269e",
       fontname: "Arial",
+      fontsize: 14,
       rank: rank,
       height: 0,
     });
