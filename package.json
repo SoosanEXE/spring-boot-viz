@@ -18,6 +18,8 @@
   },
   "homepage": "https://github.com/SoosanEXE/spring-boot-viz#readme",
   "dependencies": {
+    "graphlib": "^2.1.8",
+    "graphlib-dot": "^0.6.4",
     "tree-sitter": "^0.21.1",
     "tree-sitter-java": "^0.23.5"
   }
