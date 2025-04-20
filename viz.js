@@ -21,6 +21,8 @@ function getAllJavaFiles(dir) {
 
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
+    const isTest = fullPath.includes("test") || fullPath.includes("tests") || entry.name.includes("Test");
+    if(isTest) break;
     if (entry.isDirectory()) {
       javaFiles = javaFiles.concat(getAllJavaFiles(fullPath));
     } else if (entry.isFile() && fullPath.endsWith(".java")) {
@@ -115,7 +117,7 @@ function getComponentScannedPackages(code, root) {
   return getAnnotationArguments(code, root, "ComponentScan");
 }
 
-function isRepositoryInterface(root, code) {
+function isRepositoryInterface(root) {
   const isInterface =
     root.descendantsOfType("interface_declaration").length > 0;
   const name = getClassOrInterfaceName(root);
@@ -136,6 +138,14 @@ function getRepoGenericTypes(root) {
     .filter(Boolean);
 }
 
+function getExtendsImplementsTypes(root) {
+  return [
+    ...(root.descendantsOfType("superclass")[0]?.descendantsOfType("type_identifier") || []),
+    ...(root.descendantsOfType("super_interfaces")[0]?.descendantsOfType("type_identifier") || [])
+  ]
+ .map(c => c.text);
+}
+
 function parseAllFiles(allFiles) {
   const allParsed = [];
   for (const file of allFiles) {
@@ -150,19 +160,19 @@ function parseAllFiles(allFiles) {
 }
 
 function buildDependencyMap(dir) {
-  const depsMap = {};
-  const componentScanMap = {};
+  const allDeps = [];
   const allFiles = getAllJavaFiles(dir);
   const allParsed = parseAllFiles(allFiles);
 
   for (const { root, code, className } of allParsed) {
-    if (!depsMap[className]) depsMap[className] = new Set();
+    const deps = new Set();
+    const inheritances = new Set();
     const annotations = getAnnotations(root);
 
     if (annotations.includes("RequiredArgsConstructor")) {
       getNonNullFields(root).forEach((d) => {
         if (allParsed.some((p) => p.className === d)) {
-          depsMap[className].add(d);
+          deps.add(d);
         }
       });
     }
@@ -170,7 +180,7 @@ function buildDependencyMap(dir) {
     if (annotations.includes("AllArgsConstructor")) {
       getAllFields(root).forEach((d) => {
         if (allParsed.some((p) => p.className === d)) {
-          depsMap[className].add(d);
+          deps.add(d);
         }
       });
     }
@@ -178,68 +188,83 @@ function buildDependencyMap(dir) {
     if (annotations.includes("Setter")) {
       getSetterInjectedFields(root).forEach((d) => {
         if (allParsed.some((p) => p.className === d)) {
-          depsMap[className].add(d);
+          deps.add(d);
         }
       });
     }
 
     getAutowiredFields(root).forEach((d) => {
       if (allParsed.some((p) => p.className === d)) {
-        depsMap[className].add(d);
+        deps.add(d);
       }
     });
 
     getAutowiredSetters(root).forEach((d) => {
       if (allParsed.some((p) => p.className === d)) {
-        depsMap[className].add(d);
+        deps.add(d);
       }
     });
 
     getConstructorParams(root).forEach((d) => {
       if (allParsed.some((p) => p.className === d)) {
-        depsMap[className].add(d);
+        deps.add(d);
       }
     });
 
     getImportedDependencies(code, root).forEach((d) => {
       if (allParsed.some((p) => p.className === d)) {
-        depsMap[className].add(d);
+        deps.add(d);
       }
     });
 
-    const scannedPkgs = getComponentScannedPackages(code, root);
-    if (scannedPkgs.length) {
-      componentScanMap[className] = scannedPkgs;
-    }
+    getComponentScannedPackages(code, root).forEach((d) => {
+      if (allParsed.some((p) => p.className === d)) {
+        deps.add(d);
+      }
+    })
 
-    if (isRepositoryInterface(root, code)) {
+    if (isRepositoryInterface(root)) {
       getRepoGenericTypes(root).forEach((d) => {
         if (allParsed.some((p) => p.className === d)) {
-          depsMap[className].add(d);
+          deps.add(d);
+        }
+      });
+    } else {
+      getExtendsImplementsTypes(root).forEach((d) => {
+        if (allParsed.some((p) => p.className === d)) {
+          inheritances.add(d);
         }
       });
     }
+
+    allDeps.push({
+      "className": className,
+      "deps": deps,
+      "inheritances": inheritances
+    });
   }
-  const depsMapArray = {};
-  for (const [cls, depsSet] of Object.entries(depsMap)) {
-    depsMapArray[cls] = Array.from(depsSet);
-  }
-  return depsMapArray;
+  return allDeps;
 }
 
-function toDot(depsMap) {
+function toDot(allDeps) {
   const g = new Graph({ directed: true });
-  for (const [cls, deps] of Object.entries(depsMap)) {
-    g.setNode(cls);
-    const uniqueDeps = new Set(deps);
-    uniqueDeps.forEach((dep) => {
+  for (const file of allDeps) {
+    g.setNode(file.className);
+    file.deps.forEach((dep) => {
       g.setNode(dep);
-      g.setEdge(cls, dep, {
+      g.setEdge(file.className, dep, {
         color: "#0b269e",
       });
     });
+    file.inheritances.forEach((parent) => {
+      g.setNode(parent);
+      g.setEdge(file.className, parent, {
+        style: "dotted",
+        color: "#888888"
+      })
+    });
   }
-  g.setGraph({ rankdir: "LR", bgcolor: "#ffffff", pad: 0.3 });
+  g.setGraph({ rankdir: "LR", bgcolor: "#ffffff", pad: 0.3, layout: "dot" });
   const orderedNodes = alg.topsort(g);
   orderedNodes.forEach((node, rank) => {
     g.setNode(node, {
@@ -256,7 +281,7 @@ function toDot(depsMap) {
   return write(g);
 }
 
-const sourceDir = "C:\\Users\\HP\\dev\\FoodFrenzy\\src\\main\\java\\";
+const sourceDir = "C:\\Users\\HP\\dev\\piggymetrics\\";
 const depsMap = buildDependencyMap(sourceDir);
 const dotOutput = toDot(depsMap);
 console.log(dotOutput);
